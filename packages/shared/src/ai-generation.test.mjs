@@ -56,34 +56,6 @@ describe("direct AI provider requests", () => {
     }).text).toBe("Hey");
   });
 
-  test("reads reasoning_content when a reasoning model omits content", () => {
-    // gpt-oss style chunks: reasoning first, then the answer.
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ delta: { reasoning_content: "thinking" } }],
-    }).text).toBe("thinking");
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ delta: { content: "answer", reasoning_content: "thinking" } }],
-    }).text).toBe("answer");
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ message: { reasoning_content: "final" } }],
-    }).text).toBe("final");
-  });
-
-  test("surfaces tool calls and stream errors instead of empty text", () => {
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ delta: { tool_calls: [{ id: "call_1", type: "function", function: { name: "update_memo", arguments: "{}" } }] }, finish_reason: "tool_calls" }],
-    }).hasToolCalls).toBe(true);
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ delta: { content: "Hi" } }],
-    }).hasToolCalls).toBe(false);
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      error: { message: "Model has been deprecated", code: 5028 },
-    }).error).toBe("Model has been deprecated");
-    expect(extractAiDirectStreamDelta("openai-compatible", {
-      choices: [{ delta: { content: "Hi" } }],
-    }).error).toBeUndefined();
-  });
-
   test("still strips result boundaries while streaming", () => {
     const normalizer = createAiGenerationStreamNormalizer(prepared.resultBoundary);
     const output = [

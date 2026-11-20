@@ -5,7 +5,6 @@ import { CheckCircle2, Loader2, MoreHorizontal, Pencil, Plus, RefreshCw, Sliders
 import { useTranslation } from "react-i18next";
 import { aiErrorMessage, isLegacyProviderDisplayName, providerDefaults, trimAiText } from "@/components/settings/ai-provider-options";
 import { ComboboxInput } from "@/components/ComboboxInput";
-import { AppConfirmDialog } from "@/components/dialogs/ConfirmDialogs";
 import {
   AiModelOutputBudgetDialog,
   hasCustomAiModelOutputBudgets,
@@ -70,7 +69,6 @@ export const AiProviderCard = ({ provider: saved, defaultDisplayName, defaultMod
   const [manualDiscovery, setManualDiscovery] = useState(false);
   const [manualDiscoveryFailed, setManualDiscoveryFailed] = useState(false);
   const [budgetModelId, setBudgetModelId] = useState<string | null>(null);
-  const [pendingDeleteModel, setPendingDeleteModel] = useState<AiModelConfig | null>(null);
   const budgetModel = budgetModelId ? saved.models.find((model) => model.id === budgetModelId) ?? null : null;
 
   useEffect(() => {
@@ -230,15 +228,7 @@ export const AiProviderCard = ({ provider: saved, defaultDisplayName, defaultMod
     if (window.confirm(t("aiModel.deleteProviderConfirm", { name: effectiveDisplayName }))) deleteMutation.mutate();
   };
   const deleteModel = (model: AiModelConfig) => {
-    // Native window.confirm is suppressed in automated browsers and in-app
-    // WebViews: it returns false without ever showing a dialog, so the
-    // delete silently never runs. Open the app's own confirm dialog instead.
-    setPendingDeleteModel(model);
-  };
-  const confirmDeleteModel = () => {
-    if (!pendingDeleteModel) return;
-    deleteModelMutation.mutate(pendingDeleteModel.id);
-    setPendingDeleteModel(null);
+    if (window.confirm(t("aiModel.deleteModelConfirm", { name: model.displayName }))) deleteModelMutation.mutate(model.id);
   };
 
   return (
@@ -519,16 +509,6 @@ export const AiProviderCard = ({ provider: saved, defaultDisplayName, defaultMod
           </form>
         </DialogContent>
       </Dialog>
-
-      {pendingDeleteModel ? (
-        <AppConfirmDialog
-          title={t("aiModel.removeModel")}
-          description={t("aiModel.deleteModelConfirm", { name: pendingDeleteModel.displayName })}
-          confirmLabel={t("aiModel.removeModel")}
-          onCancel={() => setPendingDeleteModel(null)}
-          onConfirm={confirmDeleteModel}
-        />
-      ) : null}
     </section>
   );
 };

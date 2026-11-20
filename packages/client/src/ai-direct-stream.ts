@@ -59,11 +59,15 @@ export const streamDirectAiGeneration = async (
 
   const normalizer = createAiGenerationStreamNormalizer(prepared.resultBoundary);
   let hasContent = false;
+  let sawToolCalls = false;
+  let streamError: string | undefined;
   let finishReason: string | undefined;
   let inputTokens: number | undefined;
   let outputTokens: number | undefined;
   await consumeProviderEventStream(response.body, (payload) => {
     const delta = extractAiDirectStreamDelta(prepared.provider, payload);
+    if (delta.error && !streamError) streamError = delta.error;
+    if (delta.hasToolCalls) sawToolCalls = true;
     if (delta.finishReason) finishReason = delta.finishReason;
     if (typeof delta.inputTokens === "number") inputTokens = delta.inputTokens;
     if (typeof delta.outputTokens === "number") outputTokens = delta.outputTokens;
@@ -77,11 +81,21 @@ export const streamDirectAiGeneration = async (
     hasContent ||= Boolean(trailingText.trim());
     options.onEvent({ type: "text-delta", text: trailingText });
   }
+  if (streamError) {
+    options.onEvent({
+      type: "error",
+      code: "ai_generation_failed",
+      message: redactAiProviderError(streamError),
+    });
+    return;
+  }
   if (!hasContent) {
     options.onEvent({
       type: "error",
       code: "ai_generation_failed",
-      message: "The AI did not return a note result.",
+      message: sawToolCalls
+        ? "The AI returned a tool call instead of a note. Try a different model."
+        : "The AI did not return a note result.",
     });
     return;
   }

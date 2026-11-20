@@ -307,7 +307,7 @@ export const buildAiDirectProviderRequest = (
 };
 
 export const extractAiDirectStreamDelta = (provider: AiProvider, payload: unknown) => {
-  if (!payload || typeof payload !== "object") return { text: "", finishReason: undefined, inputTokens: undefined, outputTokens: undefined };
+  if (!payload || typeof payload !== "object") return { text: "", finishReason: undefined, inputTokens: undefined, outputTokens: undefined, error: undefined, hasToolCalls: false };
   const record = payload as Record<string, unknown>;
 
   if (provider === "anthropic") {
@@ -321,6 +321,8 @@ export const extractAiDirectStreamDelta = (provider: AiProvider, payload: unknow
         : typeof record.stop_reason === "string" ? record.stop_reason : undefined,
       inputTokens: typeof usage?.input_tokens === "number" ? usage.input_tokens : undefined,
       outputTokens: typeof usage?.output_tokens === "number" ? usage.output_tokens : undefined,
+      error: undefined,
+      hasToolCalls: false,
     };
   }
 
@@ -342,6 +344,8 @@ export const extractAiDirectStreamDelta = (provider: AiProvider, payload: unknow
       finishReason: typeof first?.finishReason === "string" ? first.finishReason : undefined,
       inputTokens: typeof usage?.promptTokenCount === "number" ? usage.promptTokenCount : undefined,
       outputTokens: typeof usage?.candidatesTokenCount === "number" ? usage.candidatesTokenCount : undefined,
+      error: undefined,
+      hasToolCalls: false,
     };
   }
 
@@ -350,16 +354,38 @@ export const extractAiDirectStreamDelta = (provider: AiProvider, payload: unknow
   const delta = first?.delta && typeof first.delta === "object" ? first.delta as Record<string, unknown> : null;
   const message = first?.message && typeof first.message === "object" ? first.message as Record<string, unknown> : null;
   const usage = record.usage && typeof record.usage === "object" ? record.usage as Record<string, unknown> : null;
-  const text = typeof delta?.content === "string"
+  // A stream chunk may carry a provider error instead of a delta. Surface the
+  // real message instead of letting the caller report a misleading "no result".
+  const streamErrorRecord = record.error && typeof record.error === "object" ? record.error as Record<string, unknown> : null;
+  const streamError = typeof record.error === "string"
+    ? record.error
+    : typeof streamErrorRecord?.message === "string" && streamErrorRecord.message
+      ? streamErrorRecord.message
+      : undefined;
+  // Reasoning models (e.g. gpt-oss) may put their output in `reasoning_content`
+  // instead of (or before) `content`. Prefer `content`; fall back to
+  // `reasoning_content` so the draft is not lost as "no result". The result
+  // boundary normalizer still strips anything outside the marked answer.
+  const contentText = typeof delta?.content === "string" && delta.content
     ? delta.content
-    : typeof message?.content === "string"
+    : typeof message?.content === "string" && message.content
       ? message.content
       : "";
+  const reasoningText = typeof delta?.reasoning_content === "string" && delta.reasoning_content
+    ? delta.reasoning_content
+    : typeof message?.reasoning_content === "string" && message.reasoning_content
+      ? message.reasoning_content
+      : "";
+  const text = contentText || reasoningText;
+  const hasToolCalls = (Array.isArray(delta?.tool_calls) && delta.tool_calls.length > 0)
+    || (Array.isArray(message?.tool_calls) && message.tool_calls.length > 0);
   return {
     text,
     finishReason: typeof first?.finish_reason === "string" ? first.finish_reason : undefined,
     inputTokens: typeof usage?.prompt_tokens === "number" ? usage.prompt_tokens : undefined,
     outputTokens: typeof usage?.completion_tokens === "number" ? usage.completion_tokens : undefined,
+    error: streamError,
+    hasToolCalls,
   };
 };
 

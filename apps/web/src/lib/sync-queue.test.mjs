@@ -7,7 +7,7 @@ globalThis.IDBKeyRange = IDBKeyRange;
 const { localDb } = await import("./local-db.ts");
 const { api, ApiRequestError } = await import("./api.ts");
 const { createLocalDataScope, createLocalMemo, getLocalMemo, putLocalMemo, replaceLocalMemoId, createLocalResource, listLocalResources } = await import("./local-mirror.ts");
-const { discardWebConflicts, getMemoUpdateQueueId, queueLocalAction, queueMemoCreate, queueMemoDelete, queueMemoUpdate, syncQueuedChanges } = await import("./sync-queue.ts");
+const { discardWebConflicts, getLocalActionQueueId, getMemoUpdateQueueId, queueLocalAction, queueMemoCreate, queueMemoDelete, queueMemoUpdate, syncQueuedChanges } = await import("./sync-queue.ts");
 
 afterEach(async () => {
   await localDb.transaction(
@@ -80,6 +80,31 @@ describe("web sync conflict recovery", () => {
       expect(await localDb.syncQueue.get(getMemoUpdateQueueId("memo-failed"))).toMatchObject({ status: "conflict" });
     } finally {
       api.deleteMemo = original;
+      if (globalThis.navigator) Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: previousOnline });
+    }
+  });
+
+  test("rejected notebook deletion stays a visible conflict instead of vanishing", async () => {
+    const previousOnline = globalThis.navigator?.onLine;
+    if (globalThis.navigator) Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: true });
+    const scope = createLocalDataScope("https://demo.edgeever.org", "user-1");
+    const notebookId = "nb-rejected";
+    await queueLocalAction(scope, "notebook.delete", notebookId, { notebookId, notebookIds: [notebookId] });
+    const original = api.deleteNotebook;
+    api.deleteNotebook = async () => {
+      throw new ApiRequestError(
+        "Move or delete notes in this notebook and its child notebooks before deleting it.",
+        409,
+        "notebook_not_empty",
+      );
+    };
+    try {
+      expect(await syncQueuedChanges({ scope })).toMatchObject({ conflicted: 1, failed: 0 });
+      const queued = await localDb.syncQueue.get(getLocalActionQueueId(scope, "notebook.delete", notebookId));
+      expect(queued).toMatchObject({ status: "conflict", lastErrorCode: "notebook_not_empty" });
+      expect(queued?.nextAttemptAt).toBeNull();
+    } finally {
+      api.deleteNotebook = original;
       if (globalThis.navigator) Object.defineProperty(globalThis.navigator, "onLine", { configurable: true, value: previousOnline });
     }
   });

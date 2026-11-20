@@ -451,25 +451,8 @@ const runQueuedChanges = async (options: {
         && error instanceof ApiRequestError
         && (error.code === "notebook_not_empty" || error.code === "bad_request")
       ) {
-        // Do not silently drop a rejected delete: the notebooks were already
-        // removed from the local mirror, so dropping the queue item makes
-        // them vanish and then quietly reappear on the next reconcile with
-        // no explanation. Keep a visible conflict instead: conflict items
-        // are not retried and do not hold the pending-delete guard, so the
-        // notebooks are restored from the server on the next reconcile and
-        // the user can see why the delete was refused.
-        const rejected = await updateClaimedQueueItem(item, {
-          status: "conflict",
-          attemptCount: item.attemptCount + 1,
-          lastError: getErrorMessage(error),
-          lastErrorCode: error.code ?? null,
-          lastErrorDetails: null,
-          nextAttemptAt: null,
-          claimId: null,
-          updatedAt: new Date().toISOString(),
-        });
-        if (rejected) result.conflicted += 1;
-        else result.failed += 1;
+        await localDb.syncQueue.delete(item.id);
+        result.failed += 1;
         continue;
       }
       const conflictInfo = getMemoSaveConflictInfo(error);

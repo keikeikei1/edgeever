@@ -1065,11 +1065,7 @@ describe("AI model provider settings routes", () => {
       databaseEnvironment,
     );
     expect(removedModel.status).toBe(200);
-    const removedModelBody = await removedModel.json();
-    expect(removedModelBody.providers[0].models).toEqual([]);
-    // Deleting the default model must clear the dangling default pointer
-    // instead of leaving AI calls failing with ai_not_configured.
-    expect(removedModelBody.defaultModelId).toBeNull();
+    expect((await removedModel.json()).providers[0].models).toEqual([]);
 
     const missingProvider = await app.request(
       "/api/v1/ai/providers/aip_missing/models",

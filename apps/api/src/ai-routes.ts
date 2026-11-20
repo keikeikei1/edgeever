@@ -910,13 +910,6 @@ export const registerAiRoutes = (app: Hono<AppEnv>, dependencies: AiRouteDepende
         context.env.storage.db.prepare(
           `DELETE FROM ai_models WHERE id = ? AND provider_config_id = ?`,
         ).bind(modelConfigId, providerConfigId),
-        // If the deleted model was the workspace default, clear the pointer
-        // so resolveDefaultAiModel does not 409 on a dangling id. The
-        // conditional update is a no-op for non-default models, and the
-        // settings page already prompts to pick a new default.
-        context.env.storage.db.prepare(
-          `UPDATE ai_workspace_settings SET default_model_id = NULL, updated_at = ? WHERE workspace_id = ? AND default_model_id = ?`,
-        ).bind(isoNow(), workspaceId, modelConfigId),
         auditStatement(
           context.env.storage.db,
           "user",

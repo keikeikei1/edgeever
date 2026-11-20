@@ -406,14 +406,11 @@ export const deleteNotebookTree = async (
   return result(notebookIds);
 };
 
-// REST deletion uses the same guarded path as MCP/Companion so a note created
-// or moved into the subtree after the emptiness check cannot be orphaned:
-// the guarded UPDATE re-verifies the subtree and fails with
-// `notebook_changed` (409) instead of deleting under a concurrent change.
+// Preserve the existing REST deletion contract and mechanism.
 export const deleteNotebookRecord = async (
   db: DatabaseAdapter, workspaceId: string, id: string, actor: AuditActor,
 ) => {
-  await deleteNotebookTree(db, workspaceId, id, actor, { guardConcurrentChanges: true });
+  await deleteNotebookTree(db, workspaceId, id, actor);
 };
 
 export const restoreNotebookRecord = async (
